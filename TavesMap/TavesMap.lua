@@ -632,9 +632,8 @@ local blobBusy, blobHooked = false, false
 local function ApplyBlobs()
     blobBusy = true
     for _, kind in ipairs({ "Quest", "Arch", "Task" }) do
-        local fn = Minimap["Set" .. kind .. "BlobInsideTexture"]
-        if fn then pcall(fn, Minimap, BLANK) end
-        fn = Minimap["Set" .. kind .. "BlobInsideAlpha"]
+        -- niente texture trasparente: veniva disegnata come riempimento verde. Solo opacita' a zero
+        local fn = Minimap["Set" .. kind .. "BlobInsideAlpha"]
         if fn then pcall(fn, Minimap, 0) end
         fn = Minimap["Set" .. kind .. "BlobRingAlpha"]
         if fn then pcall(fn, Minimap, 0) end
@@ -644,7 +643,7 @@ local function ApplyBlobs()
     if not blobHooked then
         blobHooked = true
         for _, kind in ipairs({ "Quest", "Arch", "Task" }) do
-            for _, part in ipairs({ "Texture", "Alpha" }) do
+            for _, part in ipairs({ "Alpha" }) do
                 local name = "Set" .. kind .. "BlobInside" .. part
                 if Minimap[name] then
                     hooksecurefunc(Minimap, name, function()
