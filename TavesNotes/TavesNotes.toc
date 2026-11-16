@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: |cffffd100Taves|rNotes
+## Title-itIT: |cffffd100Taves|rNotes
+## Notes: Aggiunge alla chat una scheda "Note": un blocco note con lista, modifica ed eliminazione, salvato tra una sessione e l'altra. /note
+## Author: tave97
+## Version: 2.0
+## IconTexture: Interface\Icons\INV_Misc_Note_01
+## Category: Taves
+## X-Category: Taves
+## OptionalDeps: TavesMenu
+## SavedVariables: TavesNotesDB
+
+TavesNotes.lua

@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: |cffffd100Taves|rCam
+## Notes: Toggle mouselook with a single key: the camera follows the mouse like in an action-combat game. It pauses on its own when you open a window. /cam
+## Notes-itIT: Attiva/disattiva il mouselook con un solo tasto: la telecamera segue il mouse come in un action combat. Pausa automatica quando apri una finestra. Comando: /cam
+## Author: tave97
+## Version: 1.0
+## OptionalDeps: TavesMenu
+## IconTexture: Interface\Icons\Ability_Hunter_EagleEye
+## Category: Taves
+## X-Category: Taves
+
+TavesCam.lua

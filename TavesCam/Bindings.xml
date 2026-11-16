@@ -1,0 +1,5 @@
+<Bindings>
+    <Binding name="TAVESCAM_TOGGLE" header="TAVESCAM">
+        TavesCam_Toggle()
+    </Binding>
+</Bindings>

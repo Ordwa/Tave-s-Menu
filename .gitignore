@@ -1,0 +1,7 @@
+# Ignora tutto tranne gli add-on Taves*
+/*
+!/.gitignore
+!/README.md
+!/Taves*/
+/Taves*.zip
+*.zip

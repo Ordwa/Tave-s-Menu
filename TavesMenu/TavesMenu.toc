@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: |cffffd100Taves|rMenu
+## Notes: Un'unica icona (ingranaggio) che apre un menu con tutti gli addon Taves. /tmenu
+## Author: tave97
+## Version: 1.0
+## IconTexture: Interface\Icons\Trade_Engineering
+## Category: Taves
+## X-Category: Taves
+## SavedVariables: TavesMenuDB
+
+TavesMenu.lua

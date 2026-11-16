@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: |cffffd100Taves|rChat
+## Title-itIT: |cffffd100Taves|rChat
+## Notes: Aggiunge alla chat una scheda "Chat": una chat di gruppo condivisa con gli amici, via whisper. /tchat
+## Author: tave97
+## Version: 3.0
+## IconTexture: Interface\Icons\INV_Letter_15
+## Category: Taves
+## X-Category: Taves
+## OptionalDeps: TavesMenu
+## SavedVariables: TavesChatGroupDB, TavesChatDB, TaverNotesDB, ChatNotesDB
+
+TavesChat.lua

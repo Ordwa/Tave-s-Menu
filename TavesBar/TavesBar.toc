@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: |cffffd100Taves|rBar
+## Title-itIT: |cffffd100Taves|rBar
+## Notes: Un box spostabile con un elenco di barre a scelta: vita, mana, rabbia, energia con livello combo e barre per i debuff sul bersaglio (con i secondi rimanenti). /tbar
+## Author: tave97
+## Version: 1.0
+## IconTexture: Interface\Icons\Ability_Rogue_Eviscerate
+## Category: Taves
+## X-Category: Taves
+## OptionalDeps: TavesMenu
+## SavedVariables: TavesBarDB
+
+TavesBar.lua
