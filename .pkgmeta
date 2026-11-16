@@ -1,0 +1,12 @@
+package-as: Taves
+
+move-folders:
+  Taves/TavesBar: TavesBar
+  Taves/TavesCam: TavesCam
+  Taves/TavesChat: TavesChat
+  Taves/TavesMap: TavesMap
+  Taves/TavesMenu: TavesMenu
+  Taves/TavesNotes: TavesNotes
+
+ignore:
+  - README.md
