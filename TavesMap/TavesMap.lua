@@ -637,6 +637,8 @@ local function ApplyBlobs()
         if fn then pcall(fn, Minimap, 0) end
         fn = Minimap["Set" .. kind .. "BlobRingAlpha"]
         if fn then pcall(fn, Minimap, 0) end
+        fn = Minimap["Set" .. kind .. "BlobRingScalar"]
+        if fn then pcall(fn, Minimap, 0) end
     end
     blobBusy = false
     -- quando Blizzard le rimette (es. selezionando una missione) le correggo subito
