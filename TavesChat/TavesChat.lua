@@ -37,9 +37,16 @@ local function Short(name)
     if not name then return "" end
     return Ambiguate and Ambiguate(name, "none") or name
 end
-local function Key(name) return Short(name):lower() end
--- nome da mostrare: senza il reame
+-- Nome della persona: la prima parola, senza reame. Lo stesso personaggio puo' arrivare come
+-- "Infidel Bastard" (mittente del whisper) e come "Infidel" (come si chiama lui stesso):
+-- cosi' i due coincidono, anche per i colori e per evitare messaggi doppi.
 local function Label(name)
+    local s = Short(name)
+    return s:match("^([^%s%-]+)") or s
+end
+local function Key(name) return Label(name):lower() end
+-- nome da usare per il whisper: intero, ma senza reame
+local function WName(name)
     local s = Short(name)
     return s:match("^([^%-]+)") or s
 end
@@ -168,8 +175,8 @@ local function Pump()
     end
     -- sempre whisper al nome del personaggio (anche per gli amici Battle.net)
     -- il whisper va al solo nome del personaggio, senza il reame
-    local r = SendAddon(PREFIX, m.msg, "WHISPER", Label(m.target))
-    Dbg("invio " .. m.msg:sub(1, 1) .. " a '" .. Label(m.target) .. "' (whisper) -> risultato " .. tostring(r))
+    local r = SendAddon(PREFIX, m.msg, "WHISPER", WName(m.target))
+    Dbg("invio " .. m.msg:sub(1, 1) .. " a '" .. WName(m.target) .. "' (whisper) -> risultato " .. tostring(r))
     local failed = (r == false) or (type(r) == "number" and r ~= 0)
     if failed then
         m.tries = (m.tries or 0) + 1
@@ -186,8 +193,8 @@ end
 
 -- whisper normale, visibile all'altro: lo avvisa dell'invito anche se non ha l'addon
 local function VisibleWhisper(target, text)
-    Dbg("whisper visibile a '" .. Label(target) .. "'")
-    pcall(SendChatMessage, text, "WHISPER", nil, Label(target))
+    Dbg("whisper visibile a '" .. WName(target) .. "'")
+    pcall(SendChatMessage, text, "WHISPER", nil, WName(target))
 end
 
 local function Broadcast(msg)
@@ -378,7 +385,7 @@ local function Invite(target)
     Send(target, "I\t" .. c.id .. "\t" .. csv)
     -- 2) whisper visibile, cosi' l'amico sa dell'invito e tu vedi che e' partito
     VisibleWhisper(target, Label(me) .. " ti ha invitato in una chat di gruppo (addon TavesChat). Se hai l'addon aggiornato ti compare la richiesta per entrare.")
-    AddSys("Invito inviato a " .. Label(target) .. " (whisper a '" .. Label(target) .. "').")
+    AddSys("Invito inviato a " .. Label(target) .. " (whisper a '" .. WName(target) .. "').")
     -- l'addon dell'amico risponde subito con una conferma: se non arriva, te lo dico
     local k, id = Key(target), c.id
     if pending[k] then pending[k].timer:Cancel() end
@@ -1221,6 +1228,14 @@ ev:SetScript("OnEvent", function(self, event, ...)
         TavesChatGroupDB = TavesChatGroupDB or {}
         db = TavesChatGroupDB
         view = db.view or "private"
+        -- chat salvata con lo stesso membro scritto in due modi: tengo una sola voce
+        if db.chat then
+            local seenK, out = {}, {}
+            for _, m in ipairs(db.chat.members) do
+                if not seenK[Key(m)] then seenK[Key(m)] = true out[#out + 1] = m end
+            end
+            db.chat.members = out
+        end
         InstallHooks()
         RebuildSeen()
     else
