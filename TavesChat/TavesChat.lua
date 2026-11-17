@@ -1,5 +1,8 @@
--- TavesChat: scheda "Chat": una chat di gruppo condivisa tra amici.
--- Trasporto: messaggi di addon in WHISPER (nascosti), un invio per ogni membro.
+-- TavesChat: scheda "Chat" con l'elenco delle chat a sinistra (come WhatsApp):
+--   Party   = la chat di party/raid del gioco (solo raccolta, nessuno storico salvato)
+--   Gilda   = la chat di gilda del gioco (idem)
+--   Privata = chat di gruppo condivisa tra amici, fatta da questo addon.
+-- Trasporto della privata: messaggi di addon in WHISPER (nascosti), un invio per ogni membro.
 -- Comando: /tchat
 
 local TAB_NAME = "Chat"
@@ -603,18 +606,102 @@ local function MemberDefs()
 end
 
 ---------------------------------------------------------------------
--- Pannello
+-- Pannello: a sinistra l'elenco delle chat, a destra la chat scelta
 ---------------------------------------------------------------------
+local LIST_W = 100
+local VIEWS = {
+    { key = "party",   label = "Party" },
+    { key = "guild",   label = "Gilda" },
+    { key = "private", label = "Privata" },
+}
+local view = "private"
+local rowsUI = {}
+local partySmf, guildSmf, heading
+
+-- Party e Gilda: niente storico salvato, solo le righe arrivate in questa sessione
+local buf = { party = {}, guild = {} }
+local GROUP_EVENTS = {
+    CHAT_MSG_PARTY                = { "party", "|cffaaaaff" },
+    CHAT_MSG_PARTY_LEADER         = { "party", "|cff77c8ff" },
+    CHAT_MSG_RAID                 = { "party", "|cffff7f00" },
+    CHAT_MSG_RAID_LEADER          = { "party", "|cffff4809" },
+    CHAT_MSG_RAID_WARNING         = { "party", "|cffff4800" },
+    CHAT_MSG_INSTANCE_CHAT        = { "party", "|cffff7f00" },
+    CHAT_MSG_INSTANCE_CHAT_LEADER = { "party", "|cffff4809" },
+    CHAT_MSG_GUILD                = { "guild", "|cff40ff40" },
+    CHAT_MSG_OFFICER              = { "guild", "|cff40c040" },
+}
+
+local function ViewSmf(k)
+    if k == "party" then return partySmf elseif k == "guild" then return guildSmf end
+    return smf
+end
+
+local function PartyChannel()
+    if LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE)
+        and not (LE_PARTY_CATEGORY_HOME and IsInGroup(LE_PARTY_CATEGORY_HOME)) then
+        return "INSTANCE_CHAT"
+    end
+    if IsInRaid and IsInRaid() then return "RAID" end
+    if IsInGroup and IsInGroup() then return "PARTY" end
+end
+
+local function AddGroupLine(v, color, text, sender)
+    local name = (sender and sender ~= "") and Label(sender) or "?"
+    if meKey and sender and Key(sender) == meKey then name = "Tu" end
+    local line = "|cff8a8a8a" .. date("%H:%M") .. "|r " .. color .. name .. ": " .. (text or "") .. "|r"
+    local b = buf[v]
+    b[#b + 1] = line
+    if #b > MAX_MSGS then table.remove(b, 1) end
+    local s = ViewSmf(v)
+    if s then s:AddMessage(line) end
+end
+
+local function GroupNote(v, text)
+    local s = ViewSmf(v)
+    if s then s:AddMessage("|cff8a8a8a- " .. text .. " -|r") end
+end
+
+-- testo scritto nella casella: lo manda alla chat selezionata
+local function SendFromInput(text)
+    text = (text or ""):match("^%s*(.-)%s*$")
+    if text == "" then return end
+    if view == "private" then
+        SendText(text)
+    elseif view == "party" then
+        local ch = PartyChannel()
+        if not ch then GroupNote("party", "Non sei in un gruppo.") return end
+        SendChatMessage(text:gsub("|", ""):sub(1, 255), ch)
+    else
+        if not IsInGuild() then GroupNote("guild", "Non sei in una gilda.") return end
+        SendChatMessage(text:gsub("|", ""):sub(1, 255), "GUILD")
+    end
+end
+
+local function PartyStatus()
+    local ch = PartyChannel()
+    if ch == "RAID" then return "Raid" elseif ch then return "In gruppo" end
+    return "Nessun gruppo"
+end
+
+local function GuildStatus()
+    if IsInGuild() then return (GetGuildInfo and GetGuildInfo("player")) or "In gilda" end
+    return "Nessuna gilda"
+end
+
 function UpdateUI()
     if not panel then return end
     local c = db and db.chat
-    btnMembers:SetShown(c ~= nil)
-    btnLeave:SetShown(c ~= nil)
-    smf:SetShown(c ~= nil)
-    input:SetShown(c ~= nil)
-    emptyText:SetShown(c == nil)
-    smf.bg:SetShown(c ~= nil)
-    if c then
+    local priv = (view == "private")
+
+    -- chat privata (quella dell'addon)
+    btnAdd:SetShown(priv)
+    btnMembers:SetShown(priv and c ~= nil)
+    btnLeave:SetShown(priv and c ~= nil)
+    smf:SetShown(priv and c ~= nil)
+    smf.bg:SetShown(priv and c ~= nil)
+    emptyText:SetShown(priv and c == nil)
+    if priv and c then
         local names = {}
         for _, m in ipairs(c.members) do
             if Key(m) ~= meKey then names[#names + 1] = Label(m) end
@@ -623,6 +710,75 @@ function UpdateUI()
     else
         title:SetText("")
     end
+
+    -- party e gilda
+    partySmf:SetShown(view == "party")
+    partySmf.bg:SetShown(view == "party")
+    guildSmf:SetShown(view == "guild")
+    guildSmf.bg:SetShown(view == "guild")
+    if view == "party" then
+        heading:SetText(PartyChannel() and "Chat di gruppo" or "Non sei in un gruppo")
+    elseif view == "guild" then
+        heading:SetText(IsInGuild() and "Chat di gilda" or "Non sei in una gilda")
+    else
+        heading:SetText("")
+    end
+
+    input:SetShown(not priv or c ~= nil)
+    input:SetMaxLetters(priv and 400 or 255)
+
+    -- elenco a sinistra
+    for _, r in ipairs(rowsUI) do
+        r.sel:SetShown(r.key == view)
+        if r.key == "party" then
+            r.sub:SetText(PartyStatus())
+        elseif r.key == "guild" then
+            r.sub:SetText(GuildStatus())
+        else
+            r.sub:SetText(c and (#c.members .. " membri") or "Nessuna chat")
+        end
+    end
+end
+
+local function SelectView(k)
+    view = k
+    if db then db.view = k end
+    if input then input:ClearFocus() end
+    UpdateUI()
+    if k == "private" then Render() end
+end
+
+local function MakeSmf()
+    local s = CreateFrame("ScrollingMessageFrame", nil, panel)
+    s:SetPoint("TOPLEFT", LIST_W + 8, -28)
+    s:SetPoint("BOTTOMRIGHT", -6, 30)
+    s:SetFontObject("ChatFontNormal")
+    s:SetJustifyH("LEFT")
+    s:SetMaxLines(600)
+    s:SetFading(false)
+    s:SetIndentedWordWrap(true)
+    s.bg = panel:CreateTexture(nil, "BACKGROUND", nil, 1)
+    s.bg:SetPoint("TOPLEFT", s, -4, 4)
+    s.bg:SetPoint("BOTTOMRIGHT", s, 4, -4)
+    s.bg:SetColorTexture(0.12, 0.12, 0.15, 0.6)
+    s:EnableMouseWheel(true)
+    s:SetScript("OnMouseWheel", function(self, delta)
+        if IsShiftKeyDown() then
+            if delta > 0 then self:ScrollToTop() else self:ScrollToBottom() end
+        elseif delta > 0 then
+            self:ScrollUp() self:ScrollUp() self:ScrollUp()
+        else
+            self:ScrollDown() self:ScrollDown() self:ScrollDown()
+        end
+    end)
+    -- link (oggetti ecc.) cliccabili nelle chat di party e gilda
+    if s.SetHyperlinksEnabled then
+        s:SetHyperlinksEnabled(true)
+        s:SetScript("OnHyperlinkClick", function(self, link, text, button)
+            if SetItemRef then SetItemRef(link, text, button, self) end
+        end)
+    end
+    return s
 end
 
 local function BuildPanel()
@@ -635,9 +791,48 @@ local function BuildPanel()
     bg:SetAllPoints()
     bg:SetColorTexture(0.04, 0.04, 0.04, 0.95)
 
+    -- colonna sinistra: elenco delle chat
+    local listBg = panel:CreateTexture(nil, "BACKGROUND", nil, 1)
+    listBg:SetPoint("TOPLEFT", 0, 0)
+    listBg:SetPoint("BOTTOMLEFT", 0, 0)
+    listBg:SetWidth(LIST_W)
+    listBg:SetColorTexture(0.09, 0.09, 0.12, 0.95)
+    local sep = panel:CreateTexture(nil, "BORDER")
+    sep:SetPoint("TOPLEFT", LIST_W, 0)
+    sep:SetPoint("BOTTOMLEFT", LIST_W, 0)
+    sep:SetWidth(1)
+    sep:SetColorTexture(0.35, 0.35, 0.35, 0.7)
+
+    for i, v in ipairs(VIEWS) do
+        local r = CreateFrame("Button", nil, panel)
+        r:SetSize(LIST_W - 2, 40)
+        r:SetPoint("TOPLEFT", 1, -4 - (i - 1) * 42)
+        r.key = v.key
+        r.hl = r:CreateTexture(nil, "HIGHLIGHT")
+        r.hl:SetAllPoints()
+        r.hl:SetColorTexture(1, 1, 1, 0.10)
+        r.sel = r:CreateTexture(nil, "BACKGROUND")
+        r.sel:SetAllPoints()
+        r.sel:SetColorTexture(1, 0.82, 0, 0.22)
+        r.t = r:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        r.t:SetPoint("TOPLEFT", 8, -7)
+        r.t:SetPoint("TOPRIGHT", -4, -7)
+        r.t:SetJustifyH("LEFT")
+        r.t:SetText(v.label)
+        r.sub = r:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        r.sub:SetPoint("TOPLEFT", r.t, "BOTTOMLEFT", 0, -3)
+        r.sub:SetPoint("TOPRIGHT", r.t, "BOTTOMRIGHT", 0, -3)
+        r.sub:SetJustifyH("LEFT")
+        r.sub:SetWordWrap(false)
+        r:SetScript("OnClick", function() SelectView(v.key) end)
+        rowsUI[i] = r
+    end
+
+    -- colonna destra: barra in alto (solo per la chat privata)
+    local X = LIST_W + 5
     btnAdd = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     btnAdd:SetSize(72, 20)
-    btnAdd:SetPoint("TOPLEFT", 4, -4)
+    btnAdd:SetPoint("TOPLEFT", X, -4)
     btnAdd:SetText("Aggiungi")
     btnAdd:SetScript("OnClick", function(self) ShowMenu(self, FriendDefs()) end)
 
@@ -661,38 +856,27 @@ local function BuildPanel()
     title:SetJustifyH("LEFT")
     title:SetWordWrap(false)
 
+    heading = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    heading:SetPoint("TOPLEFT", X + 4, -9)
+    heading:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -22, -9)
+    heading:SetJustifyH("LEFT")
+    heading:SetWordWrap(false)
+
     emptyText = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    emptyText:SetPoint("CENTER", 0, 0)
-    emptyText:SetWidth(300)
-    emptyText:SetText("Non sei in nessuna chat.\nPremi \"Aggiungi\" e scegli un amico per crearne una.")
+    emptyText:SetPoint("CENTER", panel, "CENTER", LIST_W / 2, 0)
+    emptyText:SetWidth(280)
+    emptyText:SetText("Non sei in nessuna chat privata.\nPremi \"Aggiungi\" e scegli un amico per crearne una.")
 
-    -- messaggi
-    smf = CreateFrame("ScrollingMessageFrame", nil, panel)
-    smf:SetPoint("TOPLEFT", 6, -28)
-    smf:SetPoint("BOTTOMRIGHT", -6, 30)
-    smf:SetFontObject("ChatFontNormal")
-    smf:SetJustifyH("LEFT")
-    smf:SetMaxLines(600)
-    smf:SetFading(false)
-    smf:SetIndentedWordWrap(true)
-    smf.bg = panel:CreateTexture(nil, "BACKGROUND", nil, 1)
-    smf.bg:SetPoint("TOPLEFT", smf, -4, 4)
-    smf.bg:SetPoint("BOTTOMRIGHT", smf, 4, -4)
-    smf.bg:SetColorTexture(0.12, 0.12, 0.15, 0.6)
-    smf:EnableMouseWheel(true)
-    smf:SetScript("OnMouseWheel", function(self, delta)
-        if IsShiftKeyDown() then
-            if delta > 0 then self:ScrollToTop() else self:ScrollToBottom() end
-        elseif delta > 0 then
-            self:ScrollUp() self:ScrollUp() self:ScrollUp()
-        else
-            self:ScrollDown() self:ScrollDown() self:ScrollDown()
-        end
-    end)
+    -- le tre aree messaggi (una per chat)
+    smf = MakeSmf()
+    partySmf = MakeSmf()
+    guildSmf = MakeSmf()
+    for _, line in ipairs(buf.party) do partySmf:AddMessage(line) end
+    for _, line in ipairs(buf.guild) do guildSmf:AddMessage(line) end
 
-    -- casella di scrittura: Invio manda il messaggio alla chat
+    -- casella di scrittura: Invio manda il messaggio alla chat selezionata
     input = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    input:SetPoint("BOTTOMLEFT", 12, 5)
+    input:SetPoint("BOTTOMLEFT", LIST_W + 14, 5)
     input:SetPoint("BOTTOMRIGHT", -8, 5)
     input:SetHeight(22)
     input:SetAutoFocus(false)
@@ -700,7 +884,7 @@ local function BuildPanel()
     input:SetScript("OnEnterPressed", function(self)
         local t = self:GetText()
         self:SetText("")
-        SendText(t)
+        SendFromInput(t)
     end)
     input:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
@@ -791,9 +975,18 @@ ev:RegisterEvent("PLAYER_LOGIN")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("CHAT_MSG_ADDON")
 ev:RegisterEvent("CHAT_MSG_SYSTEM")
+-- chat di party/gilda del gioco (alcuni eventi possono non esistere in questa versione)
+for name in pairs(GROUP_EVENTS) do pcall(ev.RegisterEvent, ev, name) end
+pcall(ev.RegisterEvent, ev, "GROUP_ROSTER_UPDATE")
+pcall(ev.RegisterEvent, ev, "PLAYER_GUILD_UPDATE")
 ev:SetScript("OnEvent", function(self, event, ...)
     if event == "CHAT_MSG_ADDON" then
         OnAddon(...)
+    elseif GROUP_EVENTS[event] then
+        local text, sender = ...
+        AddGroupLine(GROUP_EVENTS[event][1], GROUP_EVENTS[event][2], text, sender)
+    elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
+        UpdateUI()
     elseif event == "CHAT_MSG_SYSTEM" then
         -- se il gioco risponde "nessun giocatore con quel nome" a un invito, lo mostro qui
         local text = ...
@@ -811,6 +1004,7 @@ ev:SetScript("OnEvent", function(self, event, ...)
         meKey = me:lower()
         TavesChatGroupDB = TavesChatGroupDB or {}
         db = TavesChatGroupDB
+        view = db.view or "private"
         RebuildSeen()
     else
         self:UnregisterEvent("PLAYER_ENTERING_WORLD")
