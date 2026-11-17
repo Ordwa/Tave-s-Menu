@@ -799,10 +799,6 @@ local function OpenInput()
     return ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() == box
 end
 
-local function ClickToType(_, button)
-    if button == "LeftButton" and not GetCursorInfo() then OpenInput() end
-end
-
 -- oggetto (o abilita') trascinato sulla chat: lo linka nella casella
 local function CursorLink()
     local kind, a, b, c = GetCursorInfo()
@@ -814,16 +810,52 @@ local function CursorLink()
     end
 end
 
-local function OnDropOnChat()
-    local link = CursorLink()
-    if not link then return end
+-- Il gioco puo' svuotare il cursore prima che il rilascio arrivi alla chat (e l'ordine
+-- degli eventi cambia): quindi tengo sempre l'ultimo link visto sul cursore.
+local lastLink, lastLinkTime = nil, 0
+local function TrackCursor()
+    local l = CursorLink()
+    if l then lastLink, lastLinkTime = l, GetTime() end
+end
+
+local function InsertIntoBox(link)
+    local b = ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()
+    if not b then return end
+    if not ChatEdit_InsertLink(link) then b:Insert(link) end
+    -- controllo di sicurezza: se qualcosa ha svuotato la casella, lo reinserisco
+    local data = link:match("|H(.-)|h") or link
+    C_Timer.After(0.05, function()
+        local bb = ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()
+        if bb and not (bb:GetText() or ""):find(data, 1, true) then bb:Insert(link) end
+    end)
+end
+
+-- link pronto da inserire: dal cursore adesso, oppure visto un attimo fa
+local function TakeDropLink()
+    local l = CursorLink()
+    if not l and lastLink and GetTime() - lastLinkTime < 0.4 then l = lastLink end
+    lastLink = nil
+    return l
+end
+
+local function DoDrop(link)
+    Dbg("trascinato: " .. tostring(link))
     if OpenInput() then
         ClearCursor()
-        if not ChatEdit_InsertLink(link) then
-            local b = ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()
-            if b then b:Insert(link) end
-        end
+        InsertIntoBox(link)
     end
+end
+
+local function OnDropOnChat()
+    local link = TakeDropLink()
+    if link then DoDrop(link) end
+end
+
+local function ClickToType(_, button)
+    if button ~= "LeftButton" then return end
+    if GetCursorInfo() then return end        -- c'e' ancora qualcosa sul cursore: lo gestisce OnReceiveDrag
+    local link = TakeDropLink()               -- rilascio gia' avvenuto: il cursore era gia' vuoto
+    if link then DoDrop(link) else OpenInput() end
 end
 
 local function InstallHooks()
@@ -1036,6 +1068,7 @@ local function BuildPanel()
     -- clic sull'area della chat = inizia a scrivere; oggetto trascinato = link
     panel:SetScript("OnMouseUp", ClickToType)
     panel:SetScript("OnReceiveDrag", OnDropOnChat)
+    panel:SetScript("OnUpdate", TrackCursor)
 
     panel:SetScript("OnShow", function()
         if FCF_StopAlertFlash and chatFrame then FCF_StopAlertFlash(chatFrame) end
