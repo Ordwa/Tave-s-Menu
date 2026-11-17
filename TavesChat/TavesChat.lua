@@ -261,6 +261,16 @@ local function PersonColor(name)
     return NAME_COLORS[i]
 end
 
+-- suono quando qualcun altro scrive (/tchat suono per attivarlo o disattivarlo)
+local lastPing = 0
+local function Ping()
+    if db and db.mute then return end
+    local now = GetTime()
+    if now - lastPing < 0.5 then return end   -- niente raffiche
+    lastPing = now
+    PlaySound(SOUNDKIT and SOUNDKIT.TELL_MESSAGE or 3081)
+end
+
 local LINK_TYPES = { item = true, spell = true, quest = true, enchant = true,
     achievement = true, talent = true, currency = true }
 local function Safe(text)
@@ -305,10 +315,11 @@ function Render()
     for _, m in ipairs(c.msgs) do AddLine(m) end
 end
 
-local function AddMsg(m)
+local function AddMsg(m, quiet)
     local c = db.chat
     if not c or seen[m.id] then return end
     seen[m.id] = true
+    if not quiet and not m.sys and Key(m.from) ~= meKey then Ping() end
     local msgs = c.msgs
     local pos = #msgs + 1
     while pos > 1 and msgs[pos - 1].t > m.t do pos = pos - 1 end
@@ -511,7 +522,7 @@ local function OnAddon(prefix, msg, channel, sender)
         local t = tonumber(d)
         if not b or not c2 or not t or not e or #e > 400 then return end
         t = math.min(t, time())
-        AddMsg({ id = Key(b) .. "-" .. c2, from = Short(Dec(b)), t = t, text = Dec(e) })
+        AddMsg({ id = Key(b) .. "-" .. c2, from = Short(Dec(b)), t = t, text = Dec(e) }, true)   -- storico: senza suono
 
     elseif kind == "H" then   -- richiesta storico
         local now = GetTime()
@@ -702,7 +713,7 @@ local TEXT_COLOR = "|cffd0d0d0"   -- colore base dei testi (grigio chiaro)
 
 local function AddGroupLine(v, color, text, sender)
     local name = (sender and sender ~= "") and Label(sender) or "?"
-    if meKey and sender and Key(sender) == meKey then name = "Tu" end
+    if meKey and sender and Key(sender) == meKey then name = "Tu" else Ping() end
     local line = "|cff8a8a8a" .. date("%H:%M") .. "|r " .. PersonColor(sender or "?") .. name .. "|r: "
         .. TEXT_COLOR .. (text or "") .. "|r"
     local b = buf[v]
@@ -1221,7 +1232,11 @@ end)
 
 SLASH_TavesChatG1 = "/tchat"
 SlashCmdList["TavesChatG"] = function(arg)
-    if (arg or ""):lower():match("^%s*debug") then
+    if (arg or ""):lower():match("^%s*suono") then
+        db.mute = not db.mute
+        Say("suono " .. (db.mute and "disattivato" or "attivo"))
+        if not db.mute then Ping() end
+    elseif (arg or ""):lower():match("^%s*debug") then
         debugOn = not debugOn
         Say("debug " .. (debugOn and "attivo" or "disattivato"))
     else
