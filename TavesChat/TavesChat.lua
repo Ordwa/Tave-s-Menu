@@ -790,9 +790,11 @@ local function OpenInput()
     if view == "private" and not (db and db.chat) then return false end
     if view == "party" and not PartyChannel() then GroupNote("party", "Non sei in un gruppo.") return false end
     if view == "guild" and not IsInGuild() then GroupNote("guild", "Non sei in una gilda.") return false end
-    ChatFrame_OpenChat("", chatFrame)
     local box = BoxOf(chatFrame)
     if not box then return false end
+    -- casella gia' aperta: non la riapro, altrimenti si svuota (e perderebbe il link appena inserito)
+    if ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() == box then return true end
+    ChatFrame_OpenChat("", chatFrame)
     ApplyView(box, true)   -- idempotente: serve se l'hook non e' ancora scattato
     return ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() == box
 end
@@ -817,7 +819,10 @@ local function OnDropOnChat()
     if not link then return end
     if OpenInput() then
         ClearCursor()
-        ChatEdit_InsertLink(link)
+        if not ChatEdit_InsertLink(link) then
+            local b = ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow()
+            if b then b:Insert(link) end
+        end
     end
 end
 
