@@ -15,7 +15,7 @@ local MAX_MSGS = 200     -- messaggi conservati
 local MAX_HIST = 30      -- messaggi inviati a chi chiede lo storico
 
 local db, chatFrame, panel
-local smf, input, title, emptyText, btnAdd, btnMembers, btnLeave
+local smf, title, emptyText, btnAdd, btnMembers, btnLeave
 local me, meKey
 local seen = {}
 local lastDay
@@ -57,9 +57,26 @@ local function Full(name)
     return r and (name .. "-" .. r) or name
 end
 
+-- un link di oggetto non deve mai essere spezzato tra due messaggi: e' un'unita' sola
+local function Units(text)
+    local units, i, n = {}, 1, #text
+    while i <= n do
+        local s, e = text:find("^|c%x%x%x%x%x%x%x%x|H%a+:[^|]+|h%[[^|]*%]|h|r", i)
+        if s and #Enc(text:sub(s, e)) <= 200 then
+            units[#units + 1] = text:sub(s, e)
+            i = e + 1
+        else
+            local ch = text:match("^[%z\1-\127\194-\244][\128-\191]*", i) or text:sub(i, i)
+            units[#units + 1] = ch
+            i = i + #ch
+        end
+    end
+    return units
+end
+
 local function MakeChunks(text)
     local chunks, cur, len = {}, {}, 0
-    for ch in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+    for _, ch in ipairs(Units(text)) do
         local e = Enc(ch)
         if len + #e > CHUNK then
             chunks[#chunks + 1] = table.concat(cur)
@@ -223,8 +240,24 @@ end
 ---------------------------------------------------------------------
 -- Messaggi
 ---------------------------------------------------------------------
+-- Nei messaggi privati lascio passare solo i link veri (oggetti, abilita', ecc.);
+-- ogni altro "|" viene reso innocuo.
+local LINK_TYPES = { item = true, spell = true, quest = true, enchant = true,
+    achievement = true, talent = true, currency = true }
+local function Safe(text)
+    local links = {}
+    text = text:gsub("(|c%x%x%x%x%x%x%x%x|H(%a+):[^|]+|h%[[^|]*%]|h|r)", function(l, kind)
+        if not LINK_TYPES[kind] then return nil end
+        links[#links + 1] = l
+        return "\1" .. #links .. "\2"
+    end)
+    text = text:gsub("|", "||")
+    return (text:gsub("\1(%d+)\2", function(n) return links[tonumber(n)] end))
+end
+
 local function FormatLine(m)
-    local text = (m.text or ""):gsub("[\r\n]+", " "):gsub("|", "||")
+    local text = (m.text or ""):gsub("[\r\n]+", " ")
+    text = m.sys and text:gsub("|", "||") or Safe(text)
     if m.sys then
         return "|cff8a8a8a- " .. text .. " -|r"
     end
@@ -662,20 +695,142 @@ local function GroupNote(v, text)
     if s then s:AddMessage("|cff8a8a8a- " .. text .. " -|r") end
 end
 
--- testo scritto nella casella: lo manda alla chat selezionata
-local function SendFromInput(text)
-    text = (text or ""):match("^%s*(.-)%s*$")
-    if text == "" then return end
-    if view == "private" then
-        SendText(text)
-    elseif view == "party" then
-        local ch = PartyChannel()
-        if not ch then GroupNote("party", "Non sei in un gruppo.") return end
-        SendChatMessage(text:gsub("|", ""):sub(1, 255), ch)
-    else
-        if not IsInGuild() then GroupNote("guild", "Non sei in una gilda.") return end
-        SendChatMessage(text:gsub("|", ""):sub(1, 255), "GUILD")
+---------------------------------------------------------------------
+-- Si scrive con la casella di chat di WoW (niente casella aggiuntiva).
+-- Party/Gilda: la casella viene impostata su /p, /raid, /i oppure /g.
+-- Privata: l'Invio viene intercettato e il testo va alla chat dell'addon.
+---------------------------------------------------------------------
+local privBox, privOrigEnter
+
+local function BoxOf(f) return f and (f.editBox or _G[f:GetName() .. "EditBox"]) end
+
+local function RestoreBox()
+    if privBox then
+        privBox:SetScript("OnEnterPressed", privOrigEnter)
+        privBox, privOrigEnter = nil, nil
     end
+end
+
+local function SetPrivateHeader(box)
+    box.header:SetText("Privata: ")
+    box:SetTextInsets(15 + box.header:GetStringWidth(), 13, 0, 0)
+end
+
+local function PrivateEnter(self)
+    local text = self:GetText() or ""
+    if text:match("^%s*/") or not text:match("%S") then
+        -- comandi (/p, /w ...) o riga vuota: ci pensa WoW
+        local orig = privOrigEnter
+        RestoreBox()
+        if orig then orig(self) elseif ChatEdit_OnEnterPressed then ChatEdit_OnEnterPressed(self) end
+        return
+    end
+    pcall(self.AddHistoryLine, self, text)
+    SendText(text)
+    self:SetText("")
+    RestoreBox()
+    ChatEdit_DeactivateChat(self)
+end
+
+-- prepara la casella di chat per la chat selezionata
+local function ApplyView(box, force)
+    local ct = box:GetAttribute("chatType")
+    -- risposte a un whisper, canali, ecc.: non li tocco (a meno che l'apertura sia stata chiesta da me)
+    if not force and (ct == "BN_WHISPER" or ct == "CHANNEL"
+        or (ct == "WHISPER" and (box:GetAttribute("tellTarget") or "") ~= "")) then
+        return
+    end
+    if view == "party" then
+        local ch = PartyChannel()
+        if not ch then
+            ChatEdit_DeactivateChat(box)
+            GroupNote("party", "Non sei in un gruppo.")
+            return
+        end
+        box:SetAttribute("chatType", ch)
+        ChatEdit_UpdateHeader(box)
+    elseif view == "guild" then
+        if not IsInGuild() then
+            ChatEdit_DeactivateChat(box)
+            GroupNote("guild", "Non sei in una gilda.")
+            return
+        end
+        box:SetAttribute("chatType", "GUILD")
+        ChatEdit_UpdateHeader(box)
+    else
+        if not (db and db.chat) then
+            ChatEdit_DeactivateChat(box)
+            return
+        end
+        -- "WHISPER" senza destinatario e' un ripiego innocuo: se l'intercettazione
+        -- dell'Invio mancasse, il testo non puo' finire in /say
+        box:SetAttribute("chatType", "WHISPER")
+        box:SetAttribute("tellTarget", "")
+        ChatEdit_UpdateHeader(box)
+        if privBox ~= box then
+            privBox = box
+            privOrigEnter = box:GetScript("OnEnterPressed")
+            box:SetScript("OnEnterPressed", PrivateEnter)
+        end
+        SetPrivateHeader(box)
+    end
+end
+
+local function CloseInput()
+    local box = BoxOf(chatFrame)
+    if box and ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() == box then
+        ChatEdit_DeactivateChat(box)
+    end
+    RestoreBox()
+end
+
+-- clic sull'area della chat: parte la scrittura
+local function OpenInput()
+    if not (panel and panel:IsVisible()) then return false end
+    if view == "private" and not (db and db.chat) then return false end
+    if view == "party" and not PartyChannel() then GroupNote("party", "Non sei in un gruppo.") return false end
+    if view == "guild" and not IsInGuild() then GroupNote("guild", "Non sei in una gilda.") return false end
+    ChatFrame_OpenChat("", chatFrame)
+    local box = BoxOf(chatFrame)
+    if not box then return false end
+    ApplyView(box, true)   -- idempotente: serve se l'hook non e' ancora scattato
+    return ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() == box
+end
+
+local function ClickToType(_, button)
+    if button == "LeftButton" and not GetCursorInfo() then OpenInput() end
+end
+
+-- oggetto (o abilita') trascinato sulla chat: lo linka nella casella
+local function CursorLink()
+    local kind, a, b, c = GetCursorInfo()
+    if kind == "item" then
+        return b or (a and select(2, GetItemInfo(a)))
+    elseif kind == "spell" and GetSpellLink then
+        local ok, l = pcall(GetSpellLink, c or a)
+        return ok and l or nil
+    end
+end
+
+local function OnDropOnChat()
+    local link = CursorLink()
+    if not link then return end
+    if OpenInput() then
+        ClearCursor()
+        ChatEdit_InsertLink(link)
+    end
+end
+
+local function InstallHooks()
+    hooksecurefunc("ChatEdit_ActivateChat", function(box)
+        if panel and panel:IsVisible() and box == BoxOf(chatFrame) then ApplyView(box) end
+    end)
+    hooksecurefunc("ChatEdit_DeactivateChat", function(box)
+        if box == privBox then RestoreBox() end
+    end)
+    hooksecurefunc("ChatEdit_UpdateHeader", function(box)
+        if box == privBox then SetPrivateHeader(box) end
+    end)
 end
 
 local function PartyStatus()
@@ -724,9 +879,6 @@ function UpdateUI()
         heading:SetText("")
     end
 
-    input:SetShown(not priv or c ~= nil)
-    input:SetMaxLetters(priv and 400 or 255)
-
     -- elenco a sinistra
     for _, r in ipairs(rowsUI) do
         r.sel:SetShown(r.key == view)
@@ -743,7 +895,7 @@ end
 local function SelectView(k)
     view = k
     if db then db.view = k end
-    if input then input:ClearFocus() end
+    CloseInput()
     UpdateUI()
     if k == "private" then Render() end
 end
@@ -751,7 +903,9 @@ end
 local function MakeSmf()
     local s = CreateFrame("ScrollingMessageFrame", nil, panel)
     s:SetPoint("TOPLEFT", LIST_W + 8, -28)
-    s:SetPoint("BOTTOMRIGHT", -6, 30)
+    s:SetPoint("BOTTOMRIGHT", -6, 6)
+    s:SetScript("OnMouseUp", ClickToType)
+    s:SetScript("OnReceiveDrag", OnDropOnChat)
     s:SetFontObject("ChatFontNormal")
     s:SetJustifyH("LEFT")
     s:SetMaxLines(600)
@@ -874,19 +1028,9 @@ local function BuildPanel()
     for _, line in ipairs(buf.party) do partySmf:AddMessage(line) end
     for _, line in ipairs(buf.guild) do guildSmf:AddMessage(line) end
 
-    -- casella di scrittura: Invio manda il messaggio alla chat selezionata
-    input = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    input:SetPoint("BOTTOMLEFT", LIST_W + 14, 5)
-    input:SetPoint("BOTTOMRIGHT", -8, 5)
-    input:SetHeight(22)
-    input:SetAutoFocus(false)
-    input:SetMaxLetters(400)
-    input:SetScript("OnEnterPressed", function(self)
-        local t = self:GetText()
-        self:SetText("")
-        SendFromInput(t)
-    end)
-    input:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    -- clic sull'area della chat = inizia a scrivere; oggetto trascinato = link
+    panel:SetScript("OnMouseUp", ClickToType)
+    panel:SetScript("OnReceiveDrag", OnDropOnChat)
 
     panel:SetScript("OnShow", function()
         if FCF_StopAlertFlash and chatFrame then FCF_StopAlertFlash(chatFrame) end
@@ -894,7 +1038,7 @@ local function BuildPanel()
         Render()
     end)
     panel:SetScript("OnHide", function()
-        input:ClearFocus()
+        CloseInput()
         CloseMenu()
     end)
 
@@ -1005,6 +1149,7 @@ ev:SetScript("OnEvent", function(self, event, ...)
         TavesChatGroupDB = TavesChatGroupDB or {}
         db = TavesChatGroupDB
         view = db.view or "private"
+        InstallHooks()
         RebuildSeen()
     else
         self:UnregisterEvent("PLAYER_ENTERING_WORLD")
