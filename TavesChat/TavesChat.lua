@@ -268,7 +268,8 @@ local function Ping()
     local now = GetTime()
     if now - lastPing < 0.5 then return end   -- niente raffiche
     lastPing = now
-    PlaySound(SOUNDKIT and SOUNDKIT.TELL_MESSAGE or 3081)
+    -- il suono del ping sulla minimappa
+    PlaySound(SOUNDKIT and SOUNDKIT.MAP_PING or 3175)
 end
 
 local LINK_TYPES = { item = true, spell = true, quest = true, enchant = true,
