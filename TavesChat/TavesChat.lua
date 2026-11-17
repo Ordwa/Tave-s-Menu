@@ -263,9 +263,9 @@ local function FormatLine(m)
     end
     local ts = "|cff8a8a8a" .. date("%H:%M", m.t) .. "|r "
     if Key(m.from) == meKey then
-        return ts .. "|cff7fd67fTu|r: |cffdfffdf" .. text .. "|r"
+        return ts .. "|cff7fd67fTu|r: |cffd0d0d0" .. text .. "|r"
     end
-    return ts .. "|cffffd100" .. Label(m.from):gsub("|", "||") .. "|r: " .. text
+    return ts .. "|cffffd100" .. Label(m.from):gsub("|", "||") .. "|r: |cffd0d0d0" .. text .. "|r"
 end
 
 local function AddLine(m)
@@ -679,10 +679,26 @@ local function PartyChannel()
     if IsInGroup and IsInGroup() then return "PARTY" end
 end
 
-local function AddGroupLine(v, color, text, sender)
+local TEXT_COLOR = "|cffd0d0d0"   -- colore base dei testi (grigio chiaro)
+
+-- colore del nome: quello della classe, se il gioco la conosce; altrimenti quello del canale
+local function NameColor(guid, fallback)
+    if guid and guid ~= "" and GetPlayerInfoByGUID then
+        local ok, _, class = pcall(GetPlayerInfoByGUID, guid)
+        local c = ok and class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+        if c then
+            return string.format("|cff%02x%02x%02x", math.floor(c.r * 255 + 0.5),
+                math.floor(c.g * 255 + 0.5), math.floor(c.b * 255 + 0.5))
+        end
+    end
+    return fallback
+end
+
+local function AddGroupLine(v, color, text, sender, guid)
     local name = (sender and sender ~= "") and Label(sender) or "?"
     if meKey and sender and Key(sender) == meKey then name = "Tu" end
-    local line = "|cff8a8a8a" .. date("%H:%M") .. "|r " .. color .. name .. ": " .. (text or "") .. "|r"
+    local line = "|cff8a8a8a" .. date("%H:%M") .. "|r " .. NameColor(guid, color) .. name .. "|r: "
+        .. TEXT_COLOR .. (text or "") .. "|r"
     local b = buf[v]
     b[#b + 1] = line
     if #b > MAX_MSGS then table.remove(b, 1) end
@@ -1166,7 +1182,7 @@ ev:SetScript("OnEvent", function(self, event, ...)
         OnAddon(...)
     elseif GROUP_EVENTS[event] then
         local text, sender = ...
-        AddGroupLine(GROUP_EVENTS[event][1], GROUP_EVENTS[event][2], text, sender)
+        AddGroupLine(GROUP_EVENTS[event][1], GROUP_EVENTS[event][2], text, sender, (select(12, ...)))
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
         UpdateUI()
     elseif event == "CHAT_MSG_SYSTEM" then
