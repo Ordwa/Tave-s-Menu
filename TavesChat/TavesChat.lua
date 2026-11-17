@@ -242,6 +242,25 @@ end
 ---------------------------------------------------------------------
 -- Nei messaggi privati lascio passare solo i link veri (oggetti, abilita', ecc.);
 -- ogni altro "|" viene reso innocuo.
+-- Un colore diverso per ogni persona (non per classe). L'assegnazione e' salvata:
+-- la stessa persona ha sempre lo stesso colore, in tutte e tre le chat.
+local NAME_COLORS = {
+    "|cffff6b6b", "|cffffa94d", "|cffffd43b", "|cffa9e34b", "|cff51cf66", "|cff38d9a9",
+    "|cff3bc9db", "|cff4dabf7", "|cff748ffc", "|cffb197fc", "|cffe599f7", "|cfff783ac",
+}
+local function PersonColor(name)
+    if not db then return NAME_COLORS[1] end
+    local k = Key(name or "?")
+    db.colors = db.colors or {}
+    local i = db.colors[k]
+    if not i then
+        db.nextColor = ((db.nextColor or 0) % #NAME_COLORS) + 1
+        i = db.nextColor
+        db.colors[k] = i
+    end
+    return NAME_COLORS[i]
+end
+
 local LINK_TYPES = { item = true, spell = true, quest = true, enchant = true,
     achievement = true, talent = true, currency = true }
 local function Safe(text)
@@ -263,9 +282,9 @@ local function FormatLine(m)
     end
     local ts = "|cff8a8a8a" .. date("%H:%M", m.t) .. "|r "
     if Key(m.from) == meKey then
-        return ts .. "|cff7fd67fTu|r: |cffd0d0d0" .. text .. "|r"
+        return ts .. PersonColor(m.from) .. "Tu|r: |cffd0d0d0" .. text .. "|r"
     end
-    return ts .. "|cffffd100" .. Label(m.from):gsub("|", "||") .. "|r: |cffd0d0d0" .. text .. "|r"
+    return ts .. PersonColor(m.from) .. Label(m.from):gsub("|", "||") .. "|r: |cffd0d0d0" .. text .. "|r"
 end
 
 local function AddLine(m)
@@ -681,23 +700,10 @@ end
 
 local TEXT_COLOR = "|cffd0d0d0"   -- colore base dei testi (grigio chiaro)
 
--- colore del nome: quello della classe, se il gioco la conosce; altrimenti quello del canale
-local function NameColor(guid, fallback)
-    if guid and guid ~= "" and GetPlayerInfoByGUID then
-        local ok, _, class = pcall(GetPlayerInfoByGUID, guid)
-        local c = ok and class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
-        if c then
-            return string.format("|cff%02x%02x%02x", math.floor(c.r * 255 + 0.5),
-                math.floor(c.g * 255 + 0.5), math.floor(c.b * 255 + 0.5))
-        end
-    end
-    return fallback
-end
-
-local function AddGroupLine(v, color, text, sender, guid)
+local function AddGroupLine(v, color, text, sender)
     local name = (sender and sender ~= "") and Label(sender) or "?"
     if meKey and sender and Key(sender) == meKey then name = "Tu" end
-    local line = "|cff8a8a8a" .. date("%H:%M") .. "|r " .. NameColor(guid, color) .. name .. "|r: "
+    local line = "|cff8a8a8a" .. date("%H:%M") .. "|r " .. PersonColor(sender or "?") .. name .. "|r: "
         .. TEXT_COLOR .. (text or "") .. "|r"
     local b = buf[v]
     b[#b + 1] = line
@@ -1182,7 +1188,7 @@ ev:SetScript("OnEvent", function(self, event, ...)
         OnAddon(...)
     elseif GROUP_EVENTS[event] then
         local text, sender = ...
-        AddGroupLine(GROUP_EVENTS[event][1], GROUP_EVENTS[event][2], text, sender, (select(12, ...)))
+        AddGroupLine(GROUP_EVENTS[event][1], GROUP_EVENTS[event][2], text, sender)
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
         UpdateUI()
     elseif event == "CHAT_MSG_SYSTEM" then
