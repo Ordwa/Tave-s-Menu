@@ -499,7 +499,7 @@ local function HideByName()
             end
         end
     end
-    for _, name in ipairs({ "SexyMapCoordFrame", "GameTimeFrame", "TimeManagerClockButton", "AddonCompartmentFrame",
+    for _, name in ipairs({ "GameTimeFrame", "TimeManagerClockButton", "AddonCompartmentFrame",
         "MinimapZoomIn", "MinimapZoomOut", "MiniMapTracking", "MiniMapWorldMapButton" }) do
         if IsFrameLike(_G[name]) then ForceHide(_G[name]) end
     end
@@ -867,12 +867,6 @@ ev:SetScript("OnEvent", function(_, event)
         db.compact, db.clock, db.wheelZoom = true, true, true
     end
     Apply()
-    if event == "PLAYER_LOGIN" then
-        local loaded = (C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded)
-        if loaded and loaded("SexyMap") then
-            print("|cffffd100TavesMap:|r SexyMap e' attivo su questo personaggio e modifica la stessa minimappa (coordinate doppie, bordi): disattivalo dalla lista addon.")
-        end
-    end
 end)
 
 SLASH_TAVESMAP1 = "/tmap"

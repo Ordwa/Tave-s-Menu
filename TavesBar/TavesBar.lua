@@ -6,8 +6,8 @@
 -- Opzioni: /tbar  (oppure dal menu TavesMenu)
 --
 -- NB: in Midnight/Forever le aure sono "secret" per gli addon: il Lua non puo' leggerle.
--- Le barre debuff usano quindi i widget nativi del client (AuraContainer, come
--- NeedToKnow): l'addon li crea e li stila, e' il gioco a riempirli (barra, secondi, icona).
+-- Le barre debuff usano quindi i widget nativi del client (AuraContainer):
+-- l'addon li crea e li stila, e' il gioco a riempirli (barra, secondi, icona).
 -- Servono gli ID dell'aura: nome (risolto dal gioco), ID numerico, o appresi fuori combattimento.
 
 local DEFAULTS = {
@@ -106,7 +106,7 @@ local function Report(where, err)
     end
 end
 
--- Libro degli incantesimi: nome minuscolo -> { [id]=true } (come fa NeedToKnow, con i ranghi)
+-- Libro degli incantesimi: nome minuscolo -> { [id]=true } (con i ranghi)
 local bookIDs
 local function BookIDs(name)
     if not bookIDs then
@@ -159,7 +159,7 @@ local function BookIDs(name)
 end
 
 -- unita' e filtro in base al tipo: debuff sul bersaglio, buff su di me
--- (come nel menu di NeedToKnow: Tipo = Buff/Debuff, Unita', "solo miei")
+-- (Tipo = Buff/Debuff, Unita', "solo miei")
 local UNIT_LABEL = { player = "Me", target = "Bers.", focus = "Focus", pet = "Pet" }
 local function AuraUnit(d)
     return d.unit or (d.kind == "buff" and "player" or "target")
@@ -466,7 +466,7 @@ local function ConfigureDebuffBar(f, spec)
     f.aura, f.idKey, f.styleKey = newC, idKey, styleKey
 end
 
--- l'unita' e' compatibile col tipo? (come NeedToKnow: un debuff non puo' stare su un amico,
+-- l'unita' e' compatibile col tipo? (un debuff non puo' stare su un amico,
 -- un buff non su un nemico, salvo membri del gruppo). In dubbio: compatibile.
 local function UnitCompatible(d)
     local unit = AuraUnit(d)
@@ -502,7 +502,7 @@ local function RefreshAuras()
 end
 
 ---------------------------------------------------------------------
--- Apprendimento degli ID (solo fuori combattimento, tre passaggi come NeedToKnow)
+-- Apprendimento degli ID (solo fuori combattimento, tre passaggi)
 ---------------------------------------------------------------------
 local Apply
 
@@ -701,7 +701,7 @@ ticker:SetScript("OnUpdate", function(_, dt)
         acc = 0
         if db then Refresh() end
     end
-    if accAura >= 1 then   -- ripasso periodico delle aure (come NeedToKnow)
+    if accAura >= 1 then   -- ripasso periodico delle aure
         accAura = 0
         if db then RefreshAuras() end
     end
@@ -1003,7 +1003,7 @@ local function BuildOptions()
     add:SetText("Aggiungi")
     add:SetScript("OnClick", AddDebuff)
 
-    -- menu a comparsa per riga (stile NeedToKnow: Tipo / Su chi / Solo miei)
+    -- menu a comparsa per riga (Tipo / Su chi / Solo miei)
     local menu, menuIndex
     local menuChecks = {}
     local function MenuRefresh()
