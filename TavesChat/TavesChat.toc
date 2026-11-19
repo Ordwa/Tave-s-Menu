@@ -8,6 +8,6 @@
 ## Category: Taves
 ## X-Category: Taves
 ## OptionalDeps: TavesMenu
-## SavedVariables: TavesChatGroupDB, TavesChatDB, TaverNotesDB, ChatNotesDB
+## SavedVariables: TavesChatGroupDB, TavesChatDB, ChatNotesDB
 
 TavesChat.lua

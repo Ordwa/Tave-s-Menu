@@ -960,10 +960,10 @@ ev:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_LOGIN" then
         if RegisterPrefix then RegisterPrefix(PREFIX) end
         -- migra le note dalle versioni precedenti: quando le note stavano in TavesChat
-        -- (TavesChatDB), poi TaverNotes / ChatNotes. Le variabili vecchie sono ancora
+        -- (TavesChatDB), poi ChatNotes. Le variabili vecchie sono ancora
         -- dichiarate dal toc di TavesChat, quindi qui sono gia' caricate.
-        TavesNotesDB = TavesNotesDB or TavesChatDB or TaverNotesDB or ChatNotesDB or {}
-        TavesChatDB, TaverNotesDB, ChatNotesDB = nil, nil, nil
+        TavesNotesDB = TavesNotesDB or TavesChatDB or ChatNotesDB or {}
+        TavesChatDB, ChatNotesDB = nil, nil
         db = TavesNotesDB
         db.notes = db.notes or {}
         if #db.notes == 0 then CreateNote() end
